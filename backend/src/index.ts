@@ -936,6 +936,27 @@ app.get("/api/agents/info", requireAuth, async (req, res) => {
       }
     }
 
+    // Fetch wallet address from agent if missing (SDK deploys don't return wallet)
+    if (healthy && agent.instance_ip && !agent.wallet_address_eth) {
+      try {
+        const whoamiRes = await fetch(`http://${agent.instance_ip}:${AGENT_PORT}/whoami`, {
+          signal: AbortSignal.timeout(3000),
+        });
+        if (whoamiRes.ok) {
+          const whoami = (await whoamiRes.json()) as { agentAddress?: string };
+          if (
+            whoami.agentAddress &&
+            whoami.agentAddress !== "0x0000000000000000000000000000000000000000"
+          ) {
+            agent.wallet_address_eth = whoami.agentAddress;
+            updateAgent(agent.id, { wallet_address_eth: whoami.agentAddress });
+          }
+        }
+      } catch {
+        // Agent whoami not reachable — will retry on next poll
+      }
+    }
+
     res.json({
       name: agent.name,
       status: agent.status,
