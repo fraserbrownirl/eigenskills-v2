@@ -4,6 +4,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
+import { verifyMessage } from "viem";
 import {
   verifySiwe,
   createSessionToken,
@@ -1460,6 +1461,52 @@ app.delete("/api/telegram/link", requireAuth, (req, res) => {
     res.json({ success: unlinked });
   } catch (error) {
     handleRouteError(res, error, "Telegram unlink");
+  }
+});
+
+// ── Agent registration endpoint (agent → backend on startup) ────────────────
+
+app.post("/api/agents/register", async (req, res) => {
+  try {
+    const { userAddress, agentWallet, signature } = req.body;
+
+    if (!userAddress || !agentWallet || !signature) {
+      res.status(400).json({ error: "Missing required fields" });
+      return;
+    }
+
+    const message = `SkillsSeal Agent Registration\nUser: ${userAddress}\nAgent: ${agentWallet}`;
+
+    let recoveredAddress: string;
+    try {
+      const valid = await verifyMessage({
+        address: agentWallet as `0x${string}`,
+        message,
+        signature: signature as `0x${string}`,
+      });
+      if (!valid) {
+        res.status(401).json({ error: "Invalid signature" });
+        return;
+      }
+      recoveredAddress = agentWallet;
+    } catch {
+      res.status(401).json({ error: "Signature verification failed" });
+      return;
+    }
+
+    const agent = getAgentByUser(userAddress);
+    if (!agent) {
+      console.log(`[register] No agent found for user ${userAddress}`);
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+
+    updateAgent(agent.id, { wallet_address_eth: recoveredAddress });
+    console.log(`[register] Updated wallet for user ${userAddress}: ${recoveredAddress}`);
+
+    res.json({ success: true });
+  } catch (error) {
+    handleRouteError(res, error, "Agent registration");
   }
 });
 

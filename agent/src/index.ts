@@ -253,6 +253,33 @@ app.use(globalErrorHandler);
 
 diag("before_listen", { PORT, host: "0.0.0.0" });
 
+// Register agent wallet with backend (push model for network-isolated TEEs)
+async function registerWithBackend(): Promise<void> {
+  const userAddress = process.env.EIGENAI_WALLET_ADDRESS;
+  const agentWallet = getAgentAddress();
+
+  if (!userAddress || agentWallet === "0x0000000000000000000000000000000000000000") {
+    console.log("[register] Skipping registration (dev mode or missing credentials)");
+    return;
+  }
+
+  const message = `SkillsSeal Agent Registration\nUser: ${userAddress}\nAgent: ${agentWallet}`;
+  const signature = await signMessage(message);
+
+  const res = await fetch(`${BACKEND_URL}/api/agents/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userAddress, agentWallet, signature }),
+  });
+
+  if (res.ok) {
+    console.log(`[register] Successfully registered wallet ${agentWallet} for user ${userAddress}`);
+  } else {
+    const text = await res.text();
+    console.error(`[register] Registration failed: ${res.status} ${text}`);
+  }
+}
+
 // Start server — must bind 0.0.0.0 for TEE external access
 app.listen(PORT, "0.0.0.0", () => {
   diag("listen_success", { PORT, address: getAgentAddress() });
@@ -264,6 +291,9 @@ app.listen(PORT, "0.0.0.0", () => {
   initSelfImprovement();
   registerDefaultHeartbeats();
   startHeartbeats();
+
+  // Register wallet with backend (critical for SDK deploys where wallet isn't returned)
+  registerWithBackend().catch((err) => console.error("[register] Failed:", err));
 
   // Startup beacon — notify backend that agent booted successfully
   fetch(`${BACKEND_URL}/api/heartbeat/notify`, {
