@@ -233,7 +233,7 @@ export default function AgentSetup({ token, onDeployed }: AgentSetupProps) {
     { id: 2, title: "Identity", icon: User },
     { id: 3, title: "Authorization", icon: Shield },
     { id: 4, title: "Configuration", icon: Key },
-    { id: 5, title: "Review", icon: Server },
+    { id: 5, title: "Console", icon: Server },
   ];
 
   return (
@@ -372,6 +372,14 @@ export default function AgentSetup({ token, onDeployed }: AgentSetupProps) {
                         <li>Complete payment via Stripe</li>
                       </ol>
                     </div>
+                    <a
+                      href="https://docs.eigencloud.xyz/eigencompute/get-started/billing"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                    >
+                      View billing documentation <ExternalLink className="h-3 w-3" />
+                    </a>
                   </>
                 )}
               </div>
@@ -638,17 +646,17 @@ export default function AgentSetup({ token, onDeployed }: AgentSetupProps) {
                 Back
               </Button>
               <Button onClick={() => setStep(5)} className="flex-1">
-                Review <ChevronRight className="ml-2 h-4 w-4" />
+                Console <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
             </CardFooter>
           </>
         )}
 
-        {/* Step 5: Review and deploy */}
+        {/* Step 5: Console */}
         {step === 5 && (
           <>
             <CardHeader>
-              <CardTitle>Review & Deploy</CardTitle>
+              <CardTitle>Console</CardTitle>
               <CardDescription>
                 Confirm your agent configuration before deploying to EigenCompute.
               </CardDescription>
