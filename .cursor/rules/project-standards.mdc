@@ -29,7 +29,7 @@ Three components:
 - Skills declare `requires_env` — executor only passes those vars to subprocess
 - Auth is SIWE (Sign In With Ethereum), no passwords
 - No staking contract — curated registry is the trust model
-- **EigenCompute deploys use CLI primary** with SDK fallback. See `backend/src/eigencompute.ts`. CLI auto-layers TEE tools at deploy time. Frontend has a "Verifiable Build" toggle (default: on) for on-chain attestation.
+- **EigenCompute deploys use CLI primary with SDK fallback**. On Fly.io, Docker is unavailable, so CLI fails and SDK fallback handles deploys. This is intentional — do NOT remove the fallback. See `AGENTS.md` "Deploy Troubleshooting" section for common issues (usually quota/billing, not code).
 
 ## Context7 Library IDs
 

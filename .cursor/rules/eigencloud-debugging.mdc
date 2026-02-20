@@ -60,11 +60,19 @@ The backend uses CLI as the primary deployment path with SDK as fallback:
 
 | Strategy | When Used | Docker? | File |
 |----------|-----------|---------|------|
-| **CLI** (primary) | Always tried first | No | `backend/src/eigencompute.ts` — `deployViaCli()` with tested flags |
-| SDK (fallback) | When CLI fails + non-verifiable | No | `backend/src/eigencompute-sdk.ts` — uses `@layr-labs/ecloud-sdk` |
+| **CLI** (primary) | Always tried first | Yes | `backend/src/eigencompute.ts` — `deployViaCli()` with tested flags |
+| **SDK** (fallback) | When CLI fails (no Docker) | No | `backend/src/eigencompute-sdk.ts` — uses `@layr-labs/ecloud-sdk` |
 | GitHub Actions | When `USE_GITHUB_ACTIONS=true` | No (on host) | `backend/src/eigencompute.ts` — triggers workflow |
 
-**CLI is preferred** because it auto-layers TEE tools (KMS client, env script, labels, ENTRYPOINT) at deploy time. This allows a simple Dockerfile without manual TEE setup. The SDK path skips auto-layering and would require manual TEE toolchain in the Dockerfile.
+**CRITICAL: On Fly.io, Docker is NOT available.** The backend on Fly.io doesn't have a Docker daemon. This means:
+1. CLI deploy is attempted first
+2. CLI fails with "Docker is not running" error
+3. Backend catches this and falls back to SDK
+4. SDK's `prepareDeployFromVerifiableBuild()` deploys the pre-built image
+
+**This is the intended behavior.** The SDK fallback works correctly — do NOT "fix" this by removing the fallback or changing the architecture.
+
+**CLI is preferred locally** because it auto-layers TEE tools (KMS client, env script, labels, ENTRYPOINT) at deploy time. The SDK path also works with pre-built images.
 
 **Verifiable Build:** The CLI prompts "Build from verifiable source?" — the frontend exposes this as a toggle (default: true). Answer is piped via `echo "y"` or `echo "n"`.
 
@@ -72,7 +80,8 @@ The backend uses CLI as the primary deployment path with SDK as fallback:
 
 | Error | Root Cause | Solution |
 |-------|------------|----------|
-| `Error: Docker is not running` | CLI requires Docker daemon even for pre-built images | Use `DEPLOY_STRATEGY=sdk` (default) — no Docker needed |
+| `Error: Docker is not running` | CLI requires Docker daemon | **Expected on Fly.io** — backend automatically falls back to SDK. Not a bug. |
+| `EstimateGasExecutionError: Execution reverted` | **Operational issue** — app quota or billing | Check quota with `ecloud compute app list`, terminate stale apps. Check billing with `ecloud billing status`. |
 | `ExitPromptError: User force closed the prompt` | CLI prompts in non-interactive mode | Pipe `echo N \|` before command (CLI strategy only) |
 | `command compute:app:deploy:image:tag not found` | Colon parsed as oclif subcommand separator | Use `--image-ref` flag instead of positional arg |
 | `spawnSync /bin/sh ENOBUFS` | `yes N \|` infinite output overflows buffer | Use `echo N \|` instead |
@@ -83,6 +92,27 @@ The backend uses CLI as the primary deployment path with SDK as fallback:
 | `Workload completed` + immediate shutdown in TEE logs | Container exited or server unreachable (log redirection blocked in hardened mode) | Check `0.0.0.0` binding first; add `process.on("uncaughtException")` handler to prevent silent crashes |
 | `logging redirection only allowed on debug environment by image` | TEE hardened mode blocks stdout capture | Informational only — use `logVisibility: "private"` and add external logging (startup beacon, backend heartbeat) |
 
+## Deploy Failures: Check Operational Issues FIRST
+
+**When `/api/agents/deploy` returns 500, the problem is usually NOT code.** Check these before modifying any deploy code:
+
+### 1. Active App Quota
+```bash
+ecloud compute app list --environment sepolia --private-key 0x...
+```
+EigenCompute limits active apps per wallet. Too many running/stopped apps → new deploys revert.
+**Fix:** Terminate stale apps with `echo "y" | ecloud compute app terminate <app-id> ...`
+
+### 2. Billing Status
+```bash
+ecloud billing status --private-key 0x...
+```
+Exhausted credits or outstanding balance can block deploys.
+**Fix:** Settle balance via Stripe portal link in output.
+
+### 3. The SDK Fallback is NOT the Problem
+The error `EstimateGasExecutionError: Execution reverted` from `prepareDeployFromVerifiableBuild()` does NOT mean the SDK code is wrong. The method works correctly for pre-built images — the name is misleading. The revert is an on-chain rejection due to operational limits (quota/billing), not a code bug.
+
 ## Context7 Queries by Error Type (Extended)
 
 | Error Pattern | Context7 Query |
@@ -92,6 +122,9 @@ The backend uses CLI as the primary deployment path with SDK as fallback:
 
 ## Do Not
 
+- **Modify `eigencompute.ts` or `eigencompute-sdk.ts` when deploys fail** — the architecture is correct, check operational issues (quota/billing) first
+- **Remove the SDK fallback** — it's required for Fly.io where Docker is unavailable
+- **Assume `EstimateGasExecutionError` means code is broken** — it usually means app quota exceeded or billing issue
 - Guess CLI syntax without checking both project docs AND Context7
 - Assume flag names (they may differ between CLI versions)
 - Skip the documentation lookup even if you think you know the answer

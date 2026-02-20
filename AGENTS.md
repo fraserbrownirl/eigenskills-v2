@@ -136,8 +136,7 @@ Frontend                    Backend                     Agent (TEE)
 - Sandboxed skill execution (restricted env vars)
 - Signed execution logging
 - SIWE authentication (frontend + backend)
-- Simplified CLI-based deployment — `ecloud` CLI auto-layers TEE tools at deploy time
-- SDK fallback when CLI fails (non-verifiable builds only)
+- **Deploy architecture: CLI primary + SDK fallback** — CLI tries first, SDK fallback on Fly.io (no Docker). Both paths work. See "Deploy Troubleshooting" section.
 - Verifiable build toggle in frontend — user chooses on-chain attestation
 - 4-step agent setup wizard with verifiable build option
 - Dashboard with status, controls, task submission
@@ -237,18 +236,71 @@ python scripts/generate-registry.py # Regenerate registry.json
 
 ## Known Gotchas
 
-### Deploy Strategy (CLI Primary)
+### Deploy Strategy (CLI Primary, SDK Fallback on Fly.io)
+
 The backend uses CLI-based deployment as the primary path, with SDK as fallback:
 
 | Strategy | When Used | Docker Needed? | Description |
 |----------|-----------|----------------|-------------|
-| **CLI** (primary) | Always tried first | No (on backend) | Shells out to `ecloud` CLI with tested flags. CLI auto-layers TEE tools (KMS client, env script) at deploy time. Simple Dockerfile, no manual TEE setup. |
-| **SDK** (fallback) | When CLI fails + non-verifiable | No | Falls back to `@layr-labs/ecloud-sdk` TypeScript package. Only used for non-verifiable builds when CLI errors. |
+| **CLI** (primary) | Always tried first | Yes | Shells out to `ecloud` CLI with tested flags. CLI auto-layers TEE tools (KMS client, env script) at deploy time. Simple Dockerfile, no manual TEE setup. |
+| **SDK** (fallback) | When CLI fails due to no Docker | No | Falls back to `@layr-labs/ecloud-sdk` TypeScript package. Uses `prepareDeployFromVerifiableBuild()`. |
 | **GitHub Actions** | When `USE_GITHUB_ACTIONS=true` | No (on host) | Triggers a GitHub Actions workflow. Async — results delivered via webhook. Legacy option. |
+
+**Critical: On Fly.io, Docker is NOT available.** The backend container on Fly.io doesn't have a Docker daemon. This means:
+1. CLI deploy is attempted first
+2. CLI fails with "Docker is not running" error
+3. Backend catches this error and falls back to SDK
+4. SDK's `prepareDeployFromVerifiableBuild()` deploys the pre-built image
+
+This is the **intended behavior**, not a bug. The SDK fallback works correctly — it successfully deployed multiple apps. Do NOT "fix" this by removing the SDK fallback or changing the deploy strategy.
 
 **Verifiable Build Toggle:** The frontend exposes a toggle for "Verifiable Build" (default: on). When enabled, the CLI answers "y" to "Build from verifiable source?" prompt, generating on-chain attestation. When disabled, answers "n" for faster deploys without source verification.
 
-**Why CLI over SDK?** The CLI handles TEE tooling automatically (auto-layers `compute-source-env.sh`, `kms-client`, labels, ENTRYPOINT). The SDK's `prepareDeployFromVerifiableBuild()` skips layering, requiring manual TEE setup in Dockerfile — more complex for no benefit.
+**Why CLI over SDK?** The CLI handles TEE tooling automatically (auto-layers `compute-source-env.sh`, `kms-client`, labels, ENTRYPOINT). The SDK's `prepareDeployFromVerifiableBuild()` also works but requires the image to already be pushed to Docker Hub.
+
+### Deploy Troubleshooting
+
+**When deploys fail with 500 error, check these in order:**
+
+#### 1. Check Active App Quota
+```bash
+ecloud compute app list --environment sepolia --private-key 0x...
+```
+EigenCompute has a limit on active apps per wallet. If you have too many running/stopped apps, new deploys will revert with `EstimateGasExecutionError`. **Fix: Terminate stale apps.**
+
+#### 2. Check Billing Status
+```bash
+ecloud billing status --private-key 0x...
+```
+If credits are exhausted or there's an outstanding balance, deploys may be blocked. **Fix: Settle balance via Stripe portal link in output.**
+
+#### 3. Common Error: `EstimateGasExecutionError: Execution reverted`
+This is an on-chain revert during gas estimation. Causes:
+- **App quota exceeded** — too many active apps on the wallet
+- **Billing issue** — credits exhausted or outstanding balance
+- **Contract state issue** — rare, usually resolves after terminating stuck apps
+
+This error does NOT mean the deploy code is broken. The SDK's `prepareDeployFromVerifiableBuild()` is the correct method — it works for pre-built Docker images despite the name suggesting "verifiable source builds."
+
+#### 4. Diagnostic Commands
+```bash
+# List all apps (including terminated)
+ecloud compute app list --environment sepolia --all --private-key 0x...
+
+# Get app details
+ecloud compute app info <app-id> --environment sepolia --private-key 0x...
+
+# Terminate a stale app
+echo "y" | ecloud compute app terminate <app-id> --environment sepolia --private-key 0x...
+
+# Check billing
+ecloud billing status --private-key 0x...
+```
+
+#### 5. What NOT to Do
+- Do NOT change `eigencompute.ts` or `eigencompute-sdk.ts` when deploys fail — the architecture is correct
+- Do NOT remove the SDK fallback — it's required for Fly.io where Docker is unavailable
+- Do NOT assume the error is a code bug — check operational issues (quota, billing) first
 
 ### Wallet: viem, not ethers
 Agent wallet uses `viem` (`mnemonicToAccount`). The `ethers` package is in dependencies but unused.
