@@ -35,15 +35,7 @@ interface AgentStatusCardProps {
   onTerminateClick: () => void;
 }
 
-function CopyableAddress({
-  label,
-  address,
-  mono = true,
-}: {
-  label: string;
-  address: string;
-  mono?: boolean;
-}) {
+function CopyButton({ address }: { address: string }) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -53,28 +45,17 @@ function CopyableAddress({
   }
 
   return (
-    <div className="rounded-lg border bg-card/50 p-3">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-        <Wallet className="h-4 w-4" />
-        {label}
-      </div>
-      <div className="flex items-center gap-2">
-        <span className={cn("text-sm text-foreground truncate", mono && "font-mono")}>
-          {address}
-        </span>
-        <button
-          onClick={handleCopy}
-          className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          title="Copy to clipboard"
-        >
-          {copied ? (
-            <Check className="h-3.5 w-3.5 text-emerald-500" />
-          ) : (
-            <Copy className="h-3.5 w-3.5" />
-          )}
-        </button>
-      </div>
-    </div>
+    <button
+      onClick={handleCopy}
+      className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+      title="Copy to clipboard"
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-emerald-500" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
+    </button>
   );
 }
 
@@ -90,7 +71,6 @@ export function AgentStatusCard({
   const isTerminated = agent.status === "terminated";
 
   const hasEthWallet = !!agent.walletAddressEth;
-  const hasSolWallet = !!agent.walletAddressSol;
 
   return (
     <Card className="border-border bg-card shadow-sm">
@@ -118,17 +98,25 @@ export function AgentStatusCard({
         </Badge>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Agent Wallet Addresses */}
-        {(hasEthWallet || hasSolWallet) && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {hasEthWallet && (
-              <CopyableAddress label="Agent Wallet (ETH)" address={agent.walletAddressEth!} />
-            )}
-            {hasSolWallet && (
-              <CopyableAddress label="Agent Wallet (SOL)" address={agent.walletAddressSol!} />
-            )}
+        {/* Agent TEE Wallet Address */}
+        <div className="rounded-lg border bg-card/50 p-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+            <Wallet className="h-4 w-4" />
+            Agent TEE Wallet
           </div>
-        )}
+          {hasEthWallet ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-foreground font-mono truncate">
+                {agent.walletAddressEth}
+              </span>
+              <CopyButton address={agent.walletAddressEth!} />
+            </div>
+          ) : (
+            <span className="text-sm text-muted-foreground italic">
+              {agent.status === "deploying" ? "Generating in TEE..." : "Not available"}
+            </span>
+          )}
+        </div>
 
         {/* Status Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

@@ -137,11 +137,11 @@ export default function Home() {
                 AI Agents in Hardware-Isolated TEEs
               </div>
               <h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl md:text-7xl bg-gradient-to-r from-blue-600 via-blue-500 to-pink-500 bg-clip-text text-transparent">
-                Your agent. Your wallet. Your keys.
+                Create agents that learn and earn
               </h1>
               <p className="mx-auto max-w-2xl text-lg text-muted-foreground md:text-xl">
-                Deploy AI agents that hold their own wallets inside Trusted Execution Environments.
-                The platform never sees your keys. The agent signs every action.
+                Deploy AI agents that skill up, work, and compound value inside Trusted Execution
+                Environments.
               </p>
             </div>
 

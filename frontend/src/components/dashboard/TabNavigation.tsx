@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Terminal, List, Activity, Code, MessageCircle, KeyRound, Brain } from "lucide-react";
+import { Terminal, List, Activity, Code, Send, KeyRound, Brain } from "lucide-react";
 
 export type TabType = "task" | "skills" | "memory" | "history" | "logs" | "messaging" | "secrets";
 
@@ -16,7 +16,7 @@ export function TabNavigation({ activeTab, onTabChange }: TabNavigationProps) {
     { id: "memory", label: "Memory", icon: Brain },
     { id: "history", label: "History", icon: List },
     { id: "logs", label: "Logs", icon: Activity },
-    { id: "messaging", label: "Messaging", icon: MessageCircle },
+    { id: "messaging", label: "Telegram", icon: Send },
     { id: "secrets", label: "Secrets", icon: KeyRound },
   ];
 
