@@ -1499,15 +1499,22 @@ app.get("/api/billing/status", requireAuth, async (_req, res) => {
     }
 
     const { execSync } = await import("child_process");
-    const output = execSync(`echo "0x${privateKey.replace(/^0x/, "")}" | ecloud billing status`, {
-      encoding: "utf8",
-      timeout: 30000,
-    });
+    const rawOutput = execSync(
+      `echo "0x${privateKey.replace(/^0x/, "")}" | ecloud billing status`,
+      {
+        encoding: "utf8",
+        timeout: 30000,
+      }
+    );
+
+    // Strip ANSI escape codes for reliable parsing
+    // eslint-disable-next-line no-control-regex
+    const output = rawOutput.replace(/\u001b\[[0-9;]*[a-zA-Z]|\u001b\[[?0-9;]*[a-zA-Z]/g, "");
 
     // Parse the output
-    const statusMatch = output.match(/Status:\s*([^\n]+)/);
+    const statusMatch = output.match(/Status:\s*(.+)/);
     const walletMatch = output.match(/Wallet:\s*(0x[a-fA-F0-9]+)/);
-    const periodMatch = output.match(/Current Period:\s*([^\n]+)/);
+    const periodMatch = output.match(/Current Period:\s*(.+)/);
     const totalDueMatch = output.match(/Total Due:\s*\$?([\d,.]+)/);
     const creditsMatch = output.match(/Remaining Credits:\s*\$?([\d,.]+)/);
     const urlMatch = output.match(/(https:\/\/billing\.stripe\.com\/[^\s]+)/);
