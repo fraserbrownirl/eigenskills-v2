@@ -107,7 +107,7 @@ export default function Dashboard({ token, address, onAgentTerminated }: Dashboa
 
       {agent.status === "running" && (
         <div className="space-y-6">
-          <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+          <TabNavigation activeTab={activeTab} onTabChange={(tab) => setActiveTab(tab)} />
 
           <div className="min-h-[400px]">
             {activeTab === "task" && (

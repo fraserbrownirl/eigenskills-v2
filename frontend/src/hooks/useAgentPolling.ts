@@ -15,7 +15,7 @@ const POLL_INTERVAL_ACTIVE = 15_000;
 const POLL_INTERVAL_DEPLOYING = 5_000;
 const DEFAULT_LOG_LINES = 200;
 
-export type TabType = "task" | "skills" | "history" | "logs" | "messaging" | "secrets";
+export type TabType = "task" | "skills" | "memory" | "history" | "logs" | "messaging" | "secrets";
 
 export interface UseAgentPollingOptions {
   token: string;
