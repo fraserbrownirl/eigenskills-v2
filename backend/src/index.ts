@@ -1554,25 +1554,21 @@ app.get("/api/billing/status", requireAuth, async (_req, res) => {
       }
     );
 
-    // Strip ANSI escape codes for reliable parsing
-    // eslint-disable-next-line no-control-regex
-    const output = rawOutput.replace(/\u001b\[[0-9;]*[a-zA-Z]|\u001b\[[?0-9;]*[a-zA-Z]/g, "");
+    // Use simple includes() checks - more reliable than regex with ANSI codes
+    const isActive = rawOutput.includes("Active");
 
-    // Parse the output
-    const statusMatch = output.match(/Status:\s*(.+)/);
-    const walletMatch = output.match(/Wallet:\s*(0x[a-fA-F0-9]+)/);
-    const periodMatch = output.match(/Current Period:\s*(.+)/);
-    const totalDueMatch = output.match(/Total Due:\s*\$?([\d,.]+)/);
-    const creditsMatch = output.match(/Remaining Credits:\s*\$?([\d,.]+)/);
-    const urlMatch = output.match(/(https:\/\/billing\.stripe\.com\/[^\s]+)/);
-
-    const isActive = statusMatch?.[1]?.includes("Active") ?? false;
+    // Extract values using patterns that work despite ANSI codes
+    const walletMatch = rawOutput.match(/0x[a-fA-F0-9]{40}/);
+    const periodMatch = rawOutput.match(/Current Period:\s*([\d/]+ - [\d/]+)/);
+    const totalMatch = rawOutput.match(/Total Due:\s*\$?([\d.]+)/);
+    const creditsMatch = rawOutput.match(/Remaining Credits:\s*\$?([\d.]+)/);
+    const urlMatch = rawOutput.match(/(https:\/\/billing\.stripe\.com\/[^\s]+)/);
 
     res.json({
       active: isActive,
-      wallet: walletMatch?.[1] ?? null,
+      wallet: walletMatch?.[0] ?? null,
       period: periodMatch?.[1]?.trim() ?? null,
-      totalDue: totalDueMatch?.[1] ?? "0.00",
+      totalDue: totalMatch?.[1] ?? "0.00",
       remainingCredits: creditsMatch?.[1] ?? "0.00",
       manageUrl: urlMatch?.[1] ?? null,
     });
