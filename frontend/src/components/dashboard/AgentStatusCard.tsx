@@ -123,10 +123,34 @@ export function AgentStatusCard({
           <div className="rounded-lg border bg-card/50 p-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
               <Activity className="h-4 w-4" />
-              Health
+              Connection
             </div>
-            <div className="font-medium text-foreground">
-              {agent.healthy ? "Healthy" : "Unhealthy"}
+            <div className="space-y-0.5">
+              <div
+                className={cn(
+                  "font-medium",
+                  agent.healthy
+                    ? "text-emerald-500"
+                    : agent.status === "running"
+                      ? "text-amber-500"
+                      : "text-muted-foreground"
+                )}
+              >
+                {agent.healthy
+                  ? "Online"
+                  : agent.status === "deploying"
+                    ? "Starting..."
+                    : agent.status === "running"
+                      ? "Unreachable"
+                      : agent.status === "stopped"
+                        ? "Offline"
+                        : "Terminated"}
+              </div>
+              {!agent.healthy && agent.status === "running" && (
+                <div className="text-xs text-muted-foreground">
+                  Container running but not responding
+                </div>
+              )}
             </div>
           </div>
           <div className="rounded-lg border bg-card/50 p-3">
