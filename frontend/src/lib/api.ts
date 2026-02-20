@@ -414,3 +414,43 @@ export async function deleteMemory(token: string, key: string): Promise<void> {
     throw new Error((err as { error?: string }).error ?? "Failed to delete memory");
   }
 }
+
+// ── Billing API ────────────────────────────────────────────────────────────────
+
+export interface BillingStatus {
+  active: boolean;
+  wallet: string | null;
+  period: string | null;
+  totalDue: string;
+  remainingCredits: string;
+  manageUrl: string | null;
+  needsSubscription?: boolean;
+}
+
+export async function getBillingStatus(token: string): Promise<BillingStatus> {
+  const res = await fetch(`${BACKEND_URL}/api/billing/status`, {
+    headers: getHeaders(token),
+  });
+  if (!res.ok) {
+    return {
+      active: false,
+      wallet: null,
+      period: null,
+      totalDue: "0.00",
+      remainingCredits: "0.00",
+      manageUrl: null,
+      needsSubscription: true,
+    };
+  }
+  return res.json();
+}
+
+export async function getSubscribeUrl(token: string): Promise<string | null> {
+  const res = await fetch(`${BACKEND_URL}/api/billing/subscribe`, {
+    method: "POST",
+    headers: getHeaders(token),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.subscribeUrl ?? null;
+}

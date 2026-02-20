@@ -1487,6 +1487,89 @@ app.post("/api/heartbeat/notify", async (req, res) => {
   }
 });
 
+// ── Billing endpoints ────────────────────────────────────────────────────────
+
+// GET /api/billing/status — check EigenCloud billing status
+app.get("/api/billing/status", requireAuth, async (_req, res) => {
+  try {
+    const privateKey = process.env.EIGENCOMPUTE_PRIVATE_KEY;
+    if (!privateKey) {
+      res.status(503).json({ error: "Billing check not configured" });
+      return;
+    }
+
+    const { execSync } = await import("child_process");
+    const output = execSync(`echo "0x${privateKey.replace(/^0x/, "")}" | ecloud billing status`, {
+      encoding: "utf8",
+      timeout: 30000,
+    });
+
+    // Parse the output
+    const statusMatch = output.match(/Status:\s*([^\n]+)/);
+    const walletMatch = output.match(/Wallet:\s*(0x[a-fA-F0-9]+)/);
+    const periodMatch = output.match(/Current Period:\s*([^\n]+)/);
+    const totalDueMatch = output.match(/Total Due:\s*\$?([\d,.]+)/);
+    const creditsMatch = output.match(/Remaining Credits:\s*\$?([\d,.]+)/);
+    const urlMatch = output.match(/(https:\/\/billing\.stripe\.com\/[^\s]+)/);
+
+    const isActive = statusMatch?.[1]?.includes("Active") ?? false;
+
+    res.json({
+      active: isActive,
+      wallet: walletMatch?.[1] ?? null,
+      period: periodMatch?.[1]?.trim() ?? null,
+      totalDue: totalDueMatch?.[1] ?? "0.00",
+      remainingCredits: creditsMatch?.[1] ?? "0.00",
+      manageUrl: urlMatch?.[1] ?? null,
+    });
+  } catch (error) {
+    console.error("Billing status error:", error);
+    // If no subscription exists, the command may fail
+    res.json({
+      active: false,
+      wallet: null,
+      period: null,
+      totalDue: "0.00",
+      remainingCredits: "0.00",
+      manageUrl: null,
+      needsSubscription: true,
+    });
+  }
+});
+
+// POST /api/billing/subscribe — get subscription URL
+app.post("/api/billing/subscribe", requireAuth, async (_req, res) => {
+  try {
+    const privateKey = process.env.EIGENCOMPUTE_PRIVATE_KEY;
+    if (!privateKey) {
+      res.status(503).json({ error: "Billing not configured" });
+      return;
+    }
+
+    const { execSync } = await import("child_process");
+    const output = execSync(
+      `echo "0x${privateKey.replace(/^0x/, "")}" | ecloud billing subscribe`,
+      {
+        encoding: "utf8",
+        timeout: 30000,
+      }
+    );
+
+    // Look for Stripe checkout URL in output
+    const urlMatch = output.match(/(https:\/\/[^\s]+stripe[^\s]+)/i);
+
+    if (urlMatch) {
+      res.json({ subscribeUrl: urlMatch[1] });
+    } else {
+      // Already subscribed or URL not found
+      res.json({ subscribeUrl: null, message: "Subscription may already be active" });
+    }
+  } catch (error) {
+    console.error("Billing subscribe error:", error);
+    res.status(500).json({ error: "Failed to initiate subscription" });
+  }
+});
+
 // Health check
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

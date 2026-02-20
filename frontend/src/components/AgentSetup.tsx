@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { deployAgent, getGrantStatus, pollDeployStatus, type EnvVar } from "@/lib/api";
+import {
+  deployAgent,
+  getGrantStatus,
+  pollDeployStatus,
+  getBillingStatus,
+  type EnvVar,
+  type BillingStatus,
+} from "@/lib/api";
 import { signEigenAIGrant, getConnectedAccount } from "@/lib/wallet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +32,9 @@ import {
   Key,
   User,
   Server,
+  CreditCard,
+  ExternalLink,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +58,10 @@ export default function AgentSetup({ token, onDeployed }: AgentSetupProps) {
   const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Billing state
+  const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
+  const [checkingBilling, setCheckingBilling] = useState(false);
+
   // Grant state
   const [grantCredentials, setGrantCredentials] = useState<GrantCredentials | null>(null);
   const [grantStatus, setGrantStatus] = useState<{
@@ -57,6 +71,34 @@ export default function AgentSetup({ token, onDeployed }: AgentSetupProps) {
   }>({ checked: false, hasGrant: false, tokenCount: 0 });
   const [signingGrant, setSigningGrant] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+
+  // Check billing status on mount
+  const checkBilling = useCallback(async () => {
+    setCheckingBilling(true);
+    try {
+      const status = await getBillingStatus(token);
+      setBillingStatus(status);
+    } catch (err) {
+      console.error("Failed to check billing:", err);
+      setBillingStatus({
+        active: false,
+        wallet: null,
+        period: null,
+        totalDue: "0.00",
+        remainingCredits: "0.00",
+        manageUrl: null,
+        needsSubscription: true,
+      });
+    } finally {
+      setCheckingBilling(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (step === 1 && !billingStatus) {
+      checkBilling();
+    }
+  }, [step, billingStatus, checkBilling]);
 
   const checkGrant = useCallback(async () => {
     const address = await getConnectedAccount();
@@ -71,9 +113,9 @@ export default function AgentSetup({ token, onDeployed }: AgentSetupProps) {
     });
   }, []);
 
-  // Check grant status when entering step 2
+  // Check grant status when entering step 3
   useEffect(() => {
-    if (step === 2 && !grantStatus.checked) {
+    if (step === 3 && !grantStatus.checked) {
       checkGrant();
     }
   }, [step, grantStatus.checked, checkGrant]);
@@ -184,13 +226,14 @@ export default function AgentSetup({ token, onDeployed }: AgentSetupProps) {
     }
   }
 
-  const totalSteps = 4;
+  const totalSteps = 5;
 
   const steps = [
-    { id: 1, title: "Identity", icon: User },
-    { id: 2, title: "Authorization", icon: Shield },
-    { id: 3, title: "Configuration", icon: Key },
-    { id: 4, title: "Review", icon: Server },
+    { id: 1, title: "Billing", icon: CreditCard },
+    { id: 2, title: "Identity", icon: User },
+    { id: 3, title: "Authorization", icon: Shield },
+    { id: 4, title: "Configuration", icon: Key },
+    { id: 5, title: "Review", icon: Server },
   ];
 
   return (
@@ -251,8 +294,115 @@ export default function AgentSetup({ token, onDeployed }: AgentSetupProps) {
       </div>
 
       <Card className="border-border bg-card shadow-lg">
-        {/* Step 1: Name + Persona */}
+        {/* Step 1: Billing */}
         {step === 1 && (
+          <>
+            <CardHeader>
+              <CardTitle>EigenCloud Billing</CardTitle>
+              <CardDescription>
+                Agent deployment requires an active EigenCloud subscription.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="rounded-lg border bg-card/50 p-4 space-y-4">
+                {checkingBilling ? (
+                  <div className="flex items-center gap-3 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Checking subscription status...
+                  </div>
+                ) : billingStatus?.active ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="success"
+                        className="bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25 border-none"
+                      >
+                        Subscription Active
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Billing Period</span>
+                        <p className="font-medium">{billingStatus.period || "—"}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Current Balance</span>
+                        <p className="font-medium">${billingStatus.totalDue}</p>
+                      </div>
+                    </div>
+                    {billingStatus.manageUrl && (
+                      <a
+                        href={billingStatus.manageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                      >
+                        Manage billing <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="warning"
+                        className="bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 border-none"
+                      >
+                        No Subscription
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      You need an EigenCloud subscription to deploy agents. Pricing is{" "}
+                      <span className="font-medium text-foreground">$0.177/vCPU-hour</span> for TEE
+                      compute.
+                    </p>
+                    <div className="rounded-md bg-muted/50 p-3 text-sm space-y-2">
+                      <p className="font-medium">To subscribe:</p>
+                      <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                        <li>
+                          Install the ecloud CLI:{" "}
+                          <code className="bg-muted px-1 rounded">
+                            npm i -g @layr-labs/ecloud-cli
+                          </code>
+                        </li>
+                        <li>
+                          Run:{" "}
+                          <code className="bg-muted px-1 rounded">ecloud billing subscribe</code>
+                        </li>
+                        <li>Complete payment via Stripe</li>
+                      </ol>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {!checkingBilling && !billingStatus?.active && (
+                <Button variant="outline" onClick={checkBilling} className="w-full">
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Check Again
+                </Button>
+              )}
+            </CardContent>
+            <CardFooter>
+              <Button
+                onClick={() => setStep(2)}
+                disabled={checkingBilling || !billingStatus?.active}
+                className="w-full"
+              >
+                {billingStatus?.active ? (
+                  <>
+                    Continue <ChevronRight className="ml-2 h-4 w-4" />
+                  </>
+                ) : (
+                  "Subscription required to continue"
+                )}
+              </Button>
+            </CardFooter>
+          </>
+        )}
+
+        {/* Step 2: Name + Persona */}
+        {step === 2 && (
           <>
             <CardHeader>
               <CardTitle>Name your agent</CardTitle>
@@ -297,16 +447,19 @@ export default function AgentSetup({ token, onDeployed }: AgentSetupProps) {
                 </p>
               </div>
             </CardContent>
-            <CardFooter>
-              <Button onClick={() => setStep(2)} disabled={!name.trim()} className="w-full">
+            <CardFooter className="flex gap-3">
+              <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+                Back
+              </Button>
+              <Button onClick={() => setStep(3)} disabled={!name.trim()} className="flex-1">
                 Continue <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
             </CardFooter>
           </>
         )}
 
-        {/* Step 2: Authorize EigenAI */}
-        {step === 2 && (
+        {/* Step 3: Authorize EigenAI */}
+        {step === 3 && (
           <>
             <CardHeader>
               <CardTitle>Authorize EigenAI</CardTitle>
@@ -404,13 +557,13 @@ export default function AgentSetup({ token, onDeployed }: AgentSetupProps) {
               )}
             </CardContent>
             <CardFooter className="flex gap-3">
-              <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+              <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
                 Back
               </Button>
               <Button
                 onClick={() => {
                   setError(null);
-                  setStep(3);
+                  setStep(4);
                 }}
                 disabled={grantStatus.hasGrant && !grantCredentials}
                 className="flex-1"
@@ -421,8 +574,8 @@ export default function AgentSetup({ token, onDeployed }: AgentSetupProps) {
           </>
         )}
 
-        {/* Step 3: Env vars */}
-        {step === 3 && (
+        {/* Step 4: Env vars */}
+        {step === 4 && (
           <>
             <CardHeader>
               <CardTitle>Configure Environment</CardTitle>
@@ -481,18 +634,18 @@ export default function AgentSetup({ token, onDeployed }: AgentSetupProps) {
               </Button>
             </CardContent>
             <CardFooter className="flex gap-3">
-              <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
+              <Button variant="outline" onClick={() => setStep(3)} className="flex-1">
                 Back
               </Button>
-              <Button onClick={() => setStep(4)} className="flex-1">
+              <Button onClick={() => setStep(5)} className="flex-1">
                 Review <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
             </CardFooter>
           </>
         )}
 
-        {/* Step 4: Review and deploy */}
-        {step === 4 && (
+        {/* Step 5: Review and deploy */}
+        {step === 5 && (
           <>
             <CardHeader>
               <CardTitle>Review & Deploy</CardTitle>
@@ -595,7 +748,7 @@ export default function AgentSetup({ token, onDeployed }: AgentSetupProps) {
             <CardFooter className="flex gap-3">
               <Button
                 variant="outline"
-                onClick={() => setStep(3)}
+                onClick={() => setStep(4)}
                 disabled={deploying}
                 className="flex-1"
               >
